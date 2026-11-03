@@ -1,0 +1,47 @@
+{
+  "name": "px4-tools",
+  "displayName": "PX4 Tools",
+  "description": "Lichtblick panels for PX4 / Supernal eVTOL flights (flight status, ...)",
+  "publisher": "calunmanned",
+  "homepage": "",
+  "version": "0.0.0",
+  "license": "UNLICENSED",
+  "main": "./dist/extension.js",
+  "keywords": [],
+  "overrides": {
+    "webpack": "5.105.0"
+  },
+  "resolutions": {
+    "webpack": "5.105.0"
+  },
+  "scripts": {
+    "build": "lichtblick-extension build",
+    "lichtblick:prepublish": "lichtblick-extension build --mode production",
+    "lint": "eslint .",
+    "lint:ci": "eslint .",
+    "lint:fix": "eslint --fix .",
+    "local-install": "lichtblick-extension install",
+    "package": "lichtblick-extension package",
+    "gen:leaflet-css": "python3 scripts/gen_leaflet_css.py",
+    "gen:enums": "python3 scripts/gen_px4_enums.py ../../Supernal-eVTOL/ros2/src/px4_msgs/msg",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@lichtblick/eslint-plugin": "2.0.8",
+    "@lichtblick/suite": "1.30.0",
+    "@types/leaflet": "1.9.12",
+    "@types/node": "20.17.10",
+    "@types/react": "18.3.31",
+    "@types/react-dom": "18.3.7",
+    "create-lichtblick-extension": "1.1.0",
+    "eslint": "9.39.5",
+    "prettier": "3.9.10",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "leaflet": "1.9.4"
+  }
+}
