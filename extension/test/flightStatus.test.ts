@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { Latest, applyMessages, summarize } from "../src/flightStatus";
+import { Latest, applyMessages, summarize, trackOutage } from "../src/flightStatus";
 
 const NOW = 1_000_000;
 
@@ -182,6 +182,34 @@ describe("summarize", () => {
       value: "no data for 5 s, check QGC",
       level: "alert",
     });
+  });
+
+  it("flags the view as lost while data is stopped", () => {
+    const latest = latestFrom([status()], NOW);
+    assert.equal(summarize({}, NOW).lost, false);
+    assert.equal(summarize(latest, NOW + 1500).lost, false);
+    assert.equal(summarize(latest, NOW + 5000).lost, true);
+  });
+
+  it("remembers the last outage after data comes back", () => {
+    let latest = latestFrom([status()], NOW);
+    let outage = trackOutage(undefined, latest, NOW + 1000);
+    assert.equal(outage, undefined);
+    outage = trackOutage(outage, latest, NOW + 3000);
+    assert.deepEqual(outage, { start: NOW });
+    outage = trackOutage(outage, latest, NOW + 9000);
+    assert.deepEqual(outage, { start: NOW });
+
+    latest = applyMessages(latest, [status()], NOW + 12000);
+    outage = trackOutage(outage, latest, NOW + 12000);
+    assert.deepEqual(outage, { start: NOW, end: NOW + 12000 });
+    const link = summarize(latest, NOW + 13000, outage).link;
+    assert.equal(link.level, "ok");
+    assert.match(link.value, /^live · last lost \S+ for 12 s$/);
+
+    // a later outage replaces it
+    outage = trackOutage(outage, latest, NOW + 15000);
+    assert.deepEqual(outage, { start: NOW + 12000 });
   });
 
   it("ignores topics it does not know", () => {

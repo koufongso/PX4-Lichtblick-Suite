@@ -2,7 +2,16 @@ import { PanelExtensionContext } from "@lichtblick/suite";
 import { CSSProperties, ReactElement, useEffect, useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { ALL_TOPICS, Field, Latest, Level, applyMessages, summarize } from "./flightStatus";
+import {
+  ALL_TOPICS,
+  Field,
+  Latest,
+  Level,
+  Outage,
+  applyMessages,
+  summarize,
+  trackOutage,
+} from "./flightStatus";
 
 type Palette = Record<Level | "text" | "muted" | "track", string>;
 
@@ -33,6 +42,7 @@ const TICK_MS = 500;
 function FlightStatusPanel({ context }: { context: PanelExtensionContext }): ReactElement {
   const [latest, setLatest] = useState<Latest>({});
   const [now, setNow] = useState(() => Date.now());
+  const [outage, setOutage] = useState<Outage | undefined>();
   const [colorScheme, setColorScheme] = useState<"light" | "dark">("dark");
   const [renderDone, setRenderDone] = useState<(() => void) | undefined>();
 
@@ -67,9 +77,16 @@ function FlightStatusPanel({ context }: { context: PanelExtensionContext }): Rea
     };
   }, []);
 
-  const view = summarize(latest, now);
+  useEffect(() => {
+    setOutage((previous) => trackOutage(previous, latest, now));
+  }, [latest, now]);
+
+  const view = summarize(latest, now, outage);
   const palette = PALETTES[colorScheme];
-  const color = (field: Field): CSSProperties => ({ color: palette[field.level] });
+  // the values are frozen while the link is lost, grey them out so they don't look current
+  const color = (field: Field): CSSProperties => ({
+    color: view.lost ? palette.muted : palette[field.level],
+  });
 
   const row: CSSProperties = {
     display: "flex",
@@ -102,6 +119,22 @@ function FlightStatusPanel({ context }: { context: PanelExtensionContext }): Rea
         overflowY: "auto",
       }}
     >
+      {view.lost && (
+        <div
+          style={{
+            background: palette.alert,
+            color: "#ffffff",
+            fontSize: 16,
+            fontWeight: 700,
+            textAlign: "center",
+            padding: "8px 12px",
+            borderRadius: 4,
+            marginBottom: 10,
+          }}
+        >
+          ROS link lost, check QGC
+        </div>
+      )}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 16, fontWeight: 600 }}>
         <span style={color(view.armed)}>● {view.armed.value}</span>
         <span>
@@ -146,7 +179,10 @@ function FlightStatusPanel({ context }: { context: PanelExtensionContext }): Rea
 
       <div style={section}>
         {metric("Failsafe", view.failsafe)}
-        {metric("Link", view.link)}
+        <div style={row}>
+          <span style={label}>Link</span>
+          <span style={{ color: palette[view.link.level] }}>{view.link.value}</span>
+        </div>
       </div>
     </div>
   );

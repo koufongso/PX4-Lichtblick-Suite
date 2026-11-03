@@ -106,7 +106,12 @@ export type FlightStatusView = {
   mission: Field & { fraction?: number };
   failsafe: Field;
   link: Field;
+  // data stopped: the panel shows a banner and greys out the values, they are no longer current
+  lost: boolean;
 };
+
+// the last time the data stopped; end is unset while it is still stopped
+export type Outage = { start: number; end?: number };
 
 // QGC style flight mode names, anything else falls back to the PX4 constant name
 const MODE_NAMES: Record<string, string> = {
@@ -152,7 +157,7 @@ function speed(value: number): string {
   return `${value.toFixed(1)} m/s`;
 }
 
-export function summarize(latest: Latest, now: number): FlightStatusView {
+export function summarize(latest: Latest, now: number, outage?: Outage): FlightStatusView {
   const status = latest.vehicleStatus?.message;
   const vtol = latest.vtolStatus?.message;
   const lpos = latest.localPosition?.message;
@@ -217,7 +222,8 @@ export function summarize(latest: Latest, now: number): FlightStatusView {
           ? { value: "GCS link lost", level: "alert" }
           : { value: landed?.landed === true ? "none (landed)" : "none", level: "ok" }
       : NONE,
-    link: summarizeLink(latest, now),
+    link: summarizeLink(latest, now, outage),
+    lost: isStale(latest, now),
   };
 }
 
@@ -279,13 +285,46 @@ function summarizeMission(latest: Latest): FlightStatusView["mission"] {
   return NONE;
 }
 
-function summarizeLink(latest: Latest, now: number): Field {
+function lastDataAt(latest: Latest): number | undefined {
   const times = Object.values(latest).map((entry) => entry.receivedAt);
-  if (times.length === 0) {
+  return times.length > 0 ? Math.max(...times) : undefined;
+}
+
+function isStale(latest: Latest, now: number): boolean {
+  const last = lastDataAt(latest);
+  return last != undefined && now - last > STALE_AFTER_MS;
+}
+
+// call on every update with the previous result, so the last outage is remembered after data comes back
+export function trackOutage(
+  previous: Outage | undefined,
+  latest: Latest,
+  now: number,
+): Outage | undefined {
+  const last = lastDataAt(latest);
+  if (last == undefined) {
+    return previous;
+  }
+  const ongoing = previous != undefined && previous.end == undefined;
+  if (isStale(latest, now)) {
+    return ongoing ? previous : { start: last };
+  }
+  return ongoing ? { ...previous, end: last } : previous;
+}
+
+function summarizeLink(latest: Latest, now: number, outage: Outage | undefined): Field {
+  const last = lastDataAt(latest);
+  if (last == undefined) {
     return { value: "waiting for data", level: "warn" };
   }
-  const ageMs = now - Math.max(...times);
-  return ageMs > STALE_AFTER_MS
-    ? { value: `no data for ${(ageMs / 1000).toFixed(0)} s, check QGC`, level: "alert" }
-    : { value: "live", level: "ok" };
+  const ageMs = now - last;
+  if (ageMs > STALE_AFTER_MS) {
+    return { value: `no data for ${(ageMs / 1000).toFixed(0)} s, check QGC`, level: "alert" };
+  }
+  if (outage?.end == undefined) {
+    return { value: "live", level: "ok" };
+  }
+  const at = new Date(outage.start).toLocaleTimeString([], { hour12: false });
+  const forS = ((outage.end - outage.start) / 1000).toFixed(0);
+  return { value: `live · last lost ${at} for ${forS} s`, level: "ok" };
 }
