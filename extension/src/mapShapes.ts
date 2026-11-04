@@ -20,6 +20,19 @@ export function offsetLatLon(lat: number, lon: number, north: number, east: numb
   return [lon + dLon, lat + dLat];
 }
 
+// [north, east] of a point from a reference [m], the inverse of offsetLatLon
+export function northEastOf(
+  refLat: number,
+  refLon: number,
+  lat: number,
+  lon: number,
+): [number, number] {
+  const north = ((lat - refLat) * Math.PI * EARTH_RADIUS_M) / 180;
+  const east =
+    ((lon - refLon) * Math.PI * EARTH_RADIUS_M * Math.cos((refLat * Math.PI) / 180)) / 180;
+  return [north, east];
+}
+
 export function distanceM(a: LonLat, b: LonLat): number {
   const north = ((b[1] - a[1]) * Math.PI * EARTH_RADIUS_M) / 180;
   const east = ((b[0] - a[0]) * Math.PI * EARTH_RADIUS_M * Math.cos((a[1] * Math.PI) / 180)) / 180;

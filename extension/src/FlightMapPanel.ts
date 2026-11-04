@@ -5,7 +5,9 @@
 import { MessageEvent, PanelExtensionContext, Time } from "@lichtblick/suite";
 import L from "leaflet";
 
+import { INTRUDER_STYLE, IntruderMapLayer } from "./IntruderMapLayer";
 import { LEAFLET_CSS } from "./generated/leafletCss";
+import { INTRUDER_TOPIC, IntruderArray } from "./intruders";
 import { distanceM, offsetLatLon } from "./mapShapes";
 
 // /viz/*: throttled relay on the Jetson (viz:=true), the raw topics in recorded bags
@@ -32,10 +34,14 @@ const SATELLITE_TILES =
 type LocalPosition = {
   x: number;
   y: number;
+  z: number;
   xy_valid: boolean;
+  z_valid: boolean;
   xy_global: boolean;
+  z_global: boolean; // ref_alt valid
   ref_lat: number;
   ref_lon: number;
+  ref_alt: number;
   heading: number;
 };
 type MissionItem = { seq: number; command: number; frame: number; x: number; y: number };
@@ -88,11 +94,13 @@ class FlightMap {
   readonly #missionPath: L.Polyline;
   readonly #missionLayer = L.layerGroup();
   readonly #followButton: HTMLButtonElement;
+  readonly #intruders: IntruderMapLayer;
 
   #waypoints = new Map<number, { marker: L.Marker; item: MissionItem }>();
   #currentIndex: number | undefined;
   #hasProgress = false; // /vtol/mission_progress seen, then PX4's mission_result is ignored
   #trailPoints: L.LatLng[] = [];
+  #vehicleAltitude: number | undefined; // [m] AMSL, for the intruders' relative height
   #lastTime: Time | undefined;
   #centred = false;
   #state: SavedState;
@@ -130,6 +138,7 @@ class FlightMap {
     );
     this.#missionLayer.addTo(this.#map);
     this.#trail = L.polyline([], { color: "#ff9900", weight: 3, opacity: 0.9 }).addTo(this.#map);
+    this.#intruders = new IntruderMapLayer(this.#map);
 
     const icon = L.divIcon({ className: "fm-vehicle", html: VEHICLE_SVG, iconSize: [34, 34] });
     this.#vehicle = L.marker([0, 0], {
@@ -169,6 +178,7 @@ class FlightMap {
   handle(event: MessageEvent): void {
     if (isBefore(event.receiveTime, this.#lastTime)) {
       this.#clearTrail(); // time jumped back: seeking in a bag
+      this.#intruders.clear();
     }
     this.#lastTime = event.receiveTime;
 
@@ -182,10 +192,22 @@ class FlightMap {
     } else if (event.topic === MISSION_RESULT_TOPIC && !this.#hasProgress) {
       const result = event.message as MissionResult;
       this.#setCurrentIndex(result.valid ? result.seq_current : undefined);
+    } else if (event.topic === INTRUDER_TOPIC) {
+      const positions = this.#intruders.update(
+        event.message as IntruderArray,
+        this.#vehicleAltitude,
+      );
+      // nothing else to centre on yet (e.g. testing the intruders without the vehicle)
+      if (!this.#centred && positions.length > 0) {
+        this.#centred = true;
+        this.#map.fitBounds(L.latLngBounds(positions), { padding: [60, 60], maxZoom: 16 });
+      }
     }
   }
 
   #updateVehicle(msg: LocalPosition): void {
+    this.#vehicleAltitude =
+      msg.z_valid && msg.z_global && Number.isFinite(msg.z) ? msg.ref_alt - msg.z : undefined;
     if (!msg.xy_valid || !msg.xy_global) {
       return;
     }
@@ -289,7 +311,7 @@ class FlightMap {
 
 export function initFlightMapPanel(context: PanelExtensionContext): () => void {
   const style = document.createElement("style");
-  style.textContent = LEAFLET_CSS + STYLE;
+  style.textContent = LEAFLET_CSS + STYLE + INTRUDER_STYLE;
   context.panelElement.appendChild(style);
 
   const container = document.createElement("div");
@@ -319,11 +341,13 @@ export function initFlightMapPanel(context: PanelExtensionContext): () => void {
   };
   context.watch("currentFrame");
   context.subscribe(
-    [...LOCAL_POSITION_TOPICS, MISSION_TOPIC, MISSION_PROGRESS_TOPIC, MISSION_RESULT_TOPIC].map(
-      (topic) => ({
-        topic,
-      }),
-    ),
+    [
+      ...LOCAL_POSITION_TOPICS,
+      MISSION_TOPIC,
+      MISSION_PROGRESS_TOPIC,
+      MISSION_RESULT_TOPIC,
+      INTRUDER_TOPIC,
+    ].map((topic) => ({ topic })),
   );
 
   return () => {

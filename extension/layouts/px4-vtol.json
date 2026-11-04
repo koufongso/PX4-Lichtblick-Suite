@@ -1,0 +1,59 @@
+{
+  "configById": {
+    "PX4 Tools.Flight Status!status": {},
+    "PX4 Tools.Flight Map!map": {
+      "follow": false,
+      "satellite": true
+    },
+    "3D!scene": {
+      "cameraState": {
+        "perspective": true,
+        "distance": 1500,
+        "phi": 45,
+        "thetaOffset": 40,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
+        "fovy": 45,
+        "near": 0.5,
+        "far": 5000
+      },
+      "followMode": "follow-pose",
+      "followTf": "map",
+      "scene": {
+        "enableStats": false,
+        "syncCamera": false,
+        "transforms": {
+          "editable": false,
+          "enablePreloading": false,
+          "showLabel": false,
+          "lineWidth": 0
+        }
+      },
+      "transforms": {},
+      "topics": {
+        "/viz/vehicle_odometry": { "visible": true },
+        "/fmu/out/vehicle_odometry": { "visible": true },
+        "/vtol/mission": { "visible": true },
+        "/intruder/states": { "visible": true }
+      },
+      "layers": {},
+      "imageMode": {}
+    }
+  },
+  "globalVariables": {},
+  "userNodes": {},
+  "playbackConfig": {
+    "speed": 1
+  },
+  "layout": {
+    "direction": "row",
+    "first": "PX4 Tools.Flight Status!status",
+    "second": {
+      "direction": "column",
+      "first": "PX4 Tools.Flight Map!map",
+      "second": "3D!scene"
+    },
+    "splitPercentage": 17
+  }
+}
